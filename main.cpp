@@ -26,6 +26,8 @@ int main()
 
     std::map<int, RectangleInfo> rectangles; // 存储已检测到的长方形
     int nextID = 0;                          // 下一个可用ID
+    cv::Mat templateR = imread("../image/R.png", IMREAD_GRAYSCALE); // 加载R形模板
+    cv::Mat detectedR; // 存储检测到的R形图像
 
     while (true)
     {
@@ -85,18 +87,6 @@ int main()
                     minArea = area;
                     minRectInfo = rectInfo;
                 }
-
-                cv::Point2f rectPoints[4];
-                rotatedRect.points(rectPoints);
-                for (int i = 0; i < 4; i++)
-                {
-                    cv::line(src, rectPoints[i], rectPoints[(i + 1) % 4], cv::Scalar(0, 255, 0), 2);
-                }
-                cv::circle(src, rectInfo.center, 5, cv::Scalar(255, 0, 0), -1);
-                std::string idText = "ID: " + std::to_string(rectInfo.id);
-                cv::putText(src, idText, rectInfo.center + cv::Point2f(10, 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 0, 0), 1);
-
-                std::cout << "Rectangle Detected, ID: " << rectInfo.id << ", Center: (" << rectInfo.center.x << ", " << rectInfo.center.y << ")" << std::endl;
             }
         }
 
@@ -122,16 +112,24 @@ int main()
             }
         }
 
-        // 绘制最小面积的长方形的蓝色外框
-        if (minArea < std::numeric_limits<double>::max())
+        // 模板匹配以检测“R”形图标
+        cv::matchTemplate(graySrc, templateR, detectedR, TM_CCOEFF_NORMED);
+        double minVal, maxVal;
+        cv::Point minLoc, maxLoc;
+        cv::minMaxLoc(detectedR, &minVal, &maxVal, &minLoc, &maxLoc);
+        if (maxVal > 0.8) // 设定一个阈值
         {
-            cv::RotatedRect minRotatedRect = cv::minAreaRect(contours[std::distance(contours.begin(), std::find_if(contours.begin(), contours.end(), [&minRectInfo](const std::vector<cv::Point> &c)
-                                                                                                                   { return cv::norm(minRectInfo.center - cv::minAreaRect(c).center) < 30; }))]); // 获取对应的轮廓
-            cv::Point2f minRectPoints[4];
-            minRotatedRect.points(minRectPoints);
-            for (int i = 0; i < 4; i++)
+            cv::Point2f centerR(maxLoc.x + templateR.cols / 2, maxLoc.y + templateR.rows / 2);
+            std::cout << "Detected R at: (" << centerR.x << ", " << centerR.y << ")" << std::endl;
+
+            // 输出面积最小的长方形中心坐标
+            if (minArea < std::numeric_limits<double>::max())
             {
-                cv::line(src, minRectPoints[i], minRectPoints[(i + 1) % 4], cv::Scalar(255, 0, 0), 2); // 使用蓝色外框
+                std::cout << "Min Rectangle Center: (" << minRectInfo.center.x << ", " << minRectInfo.center.y << ")" << std::endl;
+
+                // 输出相对坐标
+                cv::Point2f relativePosition = minRectInfo.center - centerR;
+                std::cout << "Relative Position: (" << relativePosition.x << ", " << relativePosition.y << ")" << std::endl;
             }
         }
 
