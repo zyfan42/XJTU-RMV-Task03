@@ -6,6 +6,7 @@
 #include <cmath>
 #include <map>
 #include <limits>
+#include <ceres/ceres.h>
 
 using namespace std;
 using namespace cv;
@@ -18,6 +19,52 @@ struct RectangleInfo
     double area;       // 面积
 };
 
+// 旋转余序类，用于Ceres编写余序方程
+struct RotationResidual {
+    RotationResidual(double t, double observed_angular_velocity)
+        : t_(t), observed_angular_velocity_(observed_angular_velocity) {}
+
+    template <typename T>
+    bool operator()(const T* const params, T* residual) const {
+        T A = params[0];
+        T omega = params[1];
+        T phi = params[2];
+        T b = params[3];
+        // 模型 A * cos(omega * t + phi) + b
+        residual[0] = observed_angular_velocity_ - (-A * omega * ceres::sin(omega * T(t_) + phi));
+        return true;
+    }
+
+private:
+    const double t_;
+    const double observed_angular_velocity_;
+};
+
+void fitWindmillRotation(const std::vector<std::pair<double, double>>& observations) {
+    // 初始化参数
+    double params[4] = {2.0, 2.0, 2.0, 2.0}; // 初始值需要与真值差距在1以上
+
+    ceres::Problem problem;
+    for (const auto& obs : observations) {
+        problem.AddResidualBlock(
+            new ceres::AutoDiffCostFunction<RotationResidual, 1, 4>(
+                new RotationResidual(obs.first, obs.second)),
+            nullptr,
+            params);
+    }
+
+    ceres::Solver::Options options;
+    options.linear_solver_type = ceres::DENSE_QR;
+    options.minimizer_progress_to_stdout = true;
+
+    ceres::Solver::Summary summary;
+    ceres::Solve(options, &problem, &summary);
+    std::cout << summary.FullReport() << "\n";
+
+    std::cout << "Estimated Parameters: A = " << params[0] << ", omega = " << params[1]
+              << ", phi = " << params[2] << ", b = " << params[3] << "\n";
+}
+
 int main()
 {
     std::chrono::milliseconds t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
@@ -29,12 +76,16 @@ int main()
     cv::Mat templateR = imread("../image/R.png", IMREAD_GRAYSCALE); // 加载R形模板
     cv::Mat detectedR; // 存储检测到的R形图像
 
-    while (true)
+    std::vector<std::pair<double, double>> observations; // 用于旋转观测的时间和角速度
+
+    int frame_count = 0;
+
+    while (frame_count < 1000)
     {
         auto start_time = std::chrono::high_resolution_clock::now();
 
         t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
-        src = wm.getMat((double)t.count() / 1000);
+        src = wm.getMat((double)t.count());
         cv::Mat graySrc, edges;
 
         // 转为灰度图像
@@ -117,7 +168,7 @@ int main()
         double minVal, maxVal;
         cv::Point minLoc, maxLoc;
         cv::minMaxLoc(detectedR, &minVal, &maxVal, &minLoc, &maxLoc);
-        if (maxVal > 0.8) // 设定一个阈值
+        if (maxVal > 0.8) // 设定一个问题
         {
             cv::Point2f centerR(maxLoc.x + templateR.cols / 2, maxLoc.y + templateR.rows / 2);
             std::cout << "Detected R at: (" << centerR.x << ", " << centerR.y << ")" << std::endl;
@@ -130,6 +181,11 @@ int main()
                 // 输出相对坐标
                 cv::Point2f relativePosition = minRectInfo.center - centerR;
                 std::cout << "Relative Position: (" << relativePosition.x << ", " << relativePosition.y << ")" << std::endl;
+
+                // 计算角速度并记录为观测值
+                double angle = atan2(relativePosition.y, relativePosition.x);
+                double angular_velocity = angle / (t.count()); // 角速度，单位为rad/s
+                observations.emplace_back(t.count(), angular_velocity);
             }
         }
 
@@ -140,7 +196,12 @@ int main()
         imshow("Windmill", src);
         if (waitKey(1) >= 0)
             break;
+
+        frame_count++;
     }
+
+    // 调用旋转观测的拟合函数
+    fitWindmillRotation(observations);
 
     return 0;
 }
