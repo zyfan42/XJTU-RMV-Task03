@@ -91,11 +91,11 @@ void fitWindmillRotation(const std::vector<std::pair<double, double>> &observati
     ceres::Solver::Options options;
     options.linear_solver_type = ceres::DENSE_QR;
     options.minimizer_progress_to_stdout = true;
-    options.max_num_iterations = 100; // 增加最大迭代次数以确保非线性拟合的收敛
+    options.max_num_iterations = 20;              // 增加最大迭代次数以确保非线性拟合的收敛
     options.minimizer_type = ceres::TRUST_REGION; // 使用信赖域算法以适应非线性拟合
-    options.initial_trust_region_radius = 1.0; // 设置初始信赖域半径
-    options.function_tolerance = 1e-6; // 减小收敛阈值，提高拟合精度
-    options.gradient_tolerance = 1e-10; // 增加步长，改善初值和真值差异较大的情况
+    options.initial_trust_region_radius = 1.0;    // 设置初始信赖域半径
+    options.function_tolerance = 1e-6;            // 减小收敛阈值，提高拟合精度
+    options.gradient_tolerance = 1e-10;           // 增加步长，改善初值和真值差异较大的情况
 
     // 运行求解器并输出结果
     ceres::Solver::Summary summary;
