@@ -118,9 +118,8 @@ int main()
             circle(windmillFrame, centerFan, circleRadius, circleColor, -1);
             putText(windmillFrame, "Fan Center", centerFan, FONT_HERSHEY_SIMPLEX, fontScale, circleColor, fontThickness);
 
-            // Draw bounding box around fan
-            Rect FanBox = boundingRect(contours[FanIdx]);
-            rectangle(windmillFrame, FanBox, boxColor, 2);
+            // Draw edges of fan
+            drawContours(windmillFrame, contours, FanIdx, Scalar(255, 0, 0), 2);
 
             //========================== Parameter Fitting ========================//
             double params[4] = {initA, initW, initPhi, initB};
@@ -142,16 +141,20 @@ int main()
 
             // Configure the solver
             ceres::Solver::Options solverOptions;
-            solverOptions.linear_solver_type = ceres::DENSE_QR;
+            solverOptions.linear_solver_type = ceres::DENSE_SCHUR;  // Use a faster linear solver
             solverOptions.max_num_iterations = maxIterations;
             solverOptions.function_tolerance = funcTolerance;
             solverOptions.parameter_tolerance = paramTolerance;
+            solverOptions.minimizer_progress_to_stdout = false;  // Disable output for speed
+            solverOptions.num_threads = 4;  // Use multiple threads if available
+            solverOptions.use_nonmonotonic_steps = true;  // Allow non-monotonic steps to converge faster
+            solverOptions.preconditioner_type = ceres::JACOBI;  // Use preconditioner to speed up convergence
 
             ceres::Solver::Summary solverSummary;
             ceres::Solve(solverOptions, &optProblem, &solverSummary);
 
             // Output the fitting results
-            cout << solverSummary.FullReport() << "\n";
+            cout << solverSummary.BriefReport() << "\n";
             cout << "Estimated Parameters: " << endl;
             cout << "A: " << params[0] << endl;
             cout << "w: " << params[1] << endl;
