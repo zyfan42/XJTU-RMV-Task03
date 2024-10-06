@@ -72,7 +72,7 @@ void fitWindmillRotation(const std::vector<std::pair<double, double>> &observati
     std::vector<std::pair<double, double>> smoothedObservations = smoothObservations(observations, windowSize);
 
     // 初始化参数
-    double params[3] = {1.0, 1.0, 0.0}; // 使用自动配置的初始值
+    double params[3] = {0.5, 0.8, 0.0}; // 使用更接近真实情况的初始值
 
     // 创建Ceres问题对象
     ceres::Problem problem;
@@ -83,7 +83,7 @@ void fitWindmillRotation(const std::vector<std::pair<double, double>> &observati
         problem.AddResidualBlock(
             new ceres::AutoDiffCostFunction<SineResidual, 1, 3>(
                 new SineResidual(x, y)),
-            nullptr,
+            new ceres::HuberLoss(1.0), // 添加Huber损失函数以减少异常值的影响
             params);
     }
 
@@ -91,11 +91,11 @@ void fitWindmillRotation(const std::vector<std::pair<double, double>> &observati
     ceres::Solver::Options options;
     options.linear_solver_type = ceres::DENSE_QR;
     options.minimizer_progress_to_stdout = true;
-    options.max_num_iterations = 20;              // 增加最大迭代次数以确保非线性拟合的收敛
-    options.minimizer_type = ceres::TRUST_REGION; // 使用信赖域算法以适应非线性拟合
-    options.initial_trust_region_radius = 1.0;    // 设置初始信赖域半径
-    options.function_tolerance = 1e-6;            // 减小收敛阈值，提高拟合精度
-    options.gradient_tolerance = 1e-10;           // 增加步长，改善初值和真值差异较大的情况
+    options.max_num_iterations = 50;             // 增加最大迭代次数以确保非线性拟合的收敛
+    options.minimizer_type = ceres::LINE_SEARCH; // 使用线搜索算法以适应全局拟合
+    options.initial_trust_region_radius = 1.0;   // 设置初始信赖域半径
+    options.function_tolerance = 1e-14;          // 减小收敛队值，提高拟合精度
+    options.gradient_tolerance = 1e-10;          // 增加步长，改善初值和真值差异较大的情况
 
     // 运行求解器并输出结果
     ceres::Solver::Summary summary;
@@ -129,11 +129,11 @@ int main()
     double prevAngle = 0.0;
 
     // 打开CSV文件以输出观测值（可注释掉）
-    std::ofstream csvFile("observations.csv");
-    if (csvFile.is_open())
-    {
-        csvFile << "Time,AngularVelocity\n";
-    }
+    // std::ofstream csvFile("observations.csv");
+    // if (csvFile.is_open())
+    // {
+    //     csvFile << "Time,AngularVelocity\n";
+    // }
 
     while (frame_count < 600)
     {
@@ -293,10 +293,10 @@ int main()
                         std::cout << "Angular Velocity: " << angularVelocity << " rad/s" << std::endl;
 
                         // 输出到CSV文件（可注释掉）
-                        if (csvFile.is_open())
-                        {
-                            csvFile << (t.count() - initialTime) << "," << (angularVelocity - 1.3) << "\n";
-                        }
+                        // if (csvFile.is_open())
+                        // {
+                        //     csvFile << (t.count() - initialTime) << "," << (angularVelocity - 1.3) << "\n";
+                        // }
                     }
 
                     // 更新上一帧的数据
@@ -320,10 +320,10 @@ int main()
     }
 
     // 关闭CSV文件（可注释掉）
-    if (csvFile.is_open())
-    {
-        csvFile.close();
-    }
+    // if (csvFile.is_open())
+    // {
+    //     csvFile.close();
+    // }
 
     // 调用旋转观测的拟合函数
     fitWindmillRotation(observations);
